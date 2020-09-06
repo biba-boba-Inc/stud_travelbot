@@ -1,7 +1,7 @@
 import telebot
 import sqlite3
 
-bot = telebot.TeleBot('lol')
+bot = telebot.TeleBot('lul')
 
 db = sqlite3.connect("zabase.db")
 cursor = db.cursor()
@@ -19,6 +19,9 @@ db.close()
 
 @bot.message_handler(commands=['start'])
 def start_message(message):
+    if str(message.from_user.id) in globals()['users']:
+        bot.send_message(message.chat.id, 'а нахуй не пойдешь пидарасина ебаная')
+        return
     countries = globals()['countries']
     s = ""
     for i in countries:
@@ -46,7 +49,19 @@ def send_text(message):
 
     if iden not in users:
         cursor.execute("INSERT INTO userinfo(user_id) VALUES(?)", [(iden)])
+        db.commit()
         globals()['users'][iden] = users[iden] = {"country": None, "city": None}
+
+    if users[iden]["country"] and text == "Вернуться к выбору страны":
+        globals()["users"][iden]["country"] = None
+        cursor.execute("UPDATE userinfo SET country=NULL WHERE user_id=?", [(iden)])
+        s = ""
+        for i in countries:
+            s += i + '\r\n'
+        bot.send_message(message.chat.id, 'Выберите страну:\r\nДоступные страны:\r\n' + s[:-2], 
+        reply_markup=telebot.types.ReplyKeyboardRemove())
+        db.commit()
+        return
 
     if not users[iden]["country"] and text not in countries:
         bot.send_message(message.chat.id, 'Страны {} не существует или не внесена в нашу базу('.format(message.text))
@@ -60,6 +75,18 @@ def send_text(message):
         bot.send_message(message.chat.id, 'Выбрана страна {}\r\nВыберите город:\r\n{}'.format(text, s[:-2]), reply_markup=markup0)
         db.commit()
         return
+
+    if users[iden]["city"] and text == "Вернуться к выбору города":
+        globals()["users"][iden]["city"] = None
+        cursor.execute("UPDATE userinfo SET city=NULL WHERE user_id=?", [(iden)])
+        s = ""
+        for row in cursor.execute('''SELECT city.name FROM city JOIN country c ON ctr_id = c.id
+        WHERE c.name=?''', [(users[iden]["country"])]):
+            s += row[0] + '\r\n'
+        bot.send_message(message.chat.id,
+        'Выбрана страна {}\r\nВыберите город:\r\n{}'.format(users[iden]["country"], s[:-2]), reply_markup=markup0)
+        db.commit()
+        return
     
     if users[iden]["country"] and not users[iden]["city"]:
         city = cursor.execute('''SELECT city.name FROM city JOIN country c ON ctr_id = c.id
@@ -71,29 +98,10 @@ def send_text(message):
             cursor.execute("UPDATE userinfo SET city=? WHERE user_id=?", [(text), (iden)])
             bot.send_message(message.chat.id, 'Выбран город {}\r\nСписок достопримечательностей:\r\n'.format(text), reply_markup=markup1)
             db.commit()
+        return
             
     if users[iden]["city"]:
         #TODO
         pass
-
-    if users[iden]["country"] and text == "Вернуться к выбору страны":
-        globals()["users"]["country"] = None
-        cursor.execute("UPDATE userinfo SET country=NULL WHERE user_id=?", [(iden)])
-        s = ""
-        for i in countries:
-            s += i + '\r\n'
-        bot.send_message(message.chat.id, 'Выберите страну:\r\nДоступные страны:\r\n' + s[:-2], 
-        reply_markup=telebot.types.ReplyKeyboardRemove)
-        return
-
-    if users[iden]["city"] and text == "Вернуться к выбору города":
-        globals()["users"]["city"] = None
-        cursor.execute("UPDATE userinfo SET city=NULL WHERE user_id=?", [(iden)])
-        s = ""
-        for row in cursor.execute('''SELECT city.name FROM city JOIN country c ON ctr_id = c.id
-        WHERE c.name=?''', [(users[iden]["country"])]):
-            s += row[0] + '\r\n'
-        bot.send_message(message.chat.id,
-        'Выбрана страна {}\r\nВыберите город:\r\n{}'.format(users[iden]["country"], s[:-2]), reply_markup=markup0)
 
 bot.polling()
