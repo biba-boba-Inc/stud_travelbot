@@ -153,8 +153,33 @@ def send_text(message):
         return
 
     if users[iden]["city"] and text == "Вывести список достопримечательностей":
-        #TODO
-        pass
+        rows = [x[0] for x in list(cursor.execute('''SELECT u.name FROM unit u JOIN city c ON city_id = c.id
+            WHERE c.name=?''', [(users[iden]["city"])]))]
+
+        pages = telebot.types.InlineKeyboardMarkup()
+        
+        btns = []
+        btns.append(telebot.types.InlineKeyboardButton(text="*1*", callback_data="nope"))
+
+        for i in range(1, len(rows)+1):
+            if i % 10 == 0 and i < 40:
+                btns.append(telebot.types.InlineKeyboardButton(text=str(i//10+1), callback_data=str(i//10+1)+'s'))
+            elif i > 40:
+                btns.append(telebot.types.InlineKeyboardButton(text=str(len(rows)//10+1),
+                    callback_data=str(len(rows)//10+1)+'s'))
+                break
+
+        pages.add(*btns)
+
+        page = 0
+        stop = len(rows) if page*10+10 > len(rows) else page*10+10
+
+        s = ""
+        for i in range(page*10, stop):
+            s += rows[i] + '\r\n'
+
+        bot.send_message(message.chat.id, 'Список достопримечательностей:\r\n\r\n{}'.format(s), reply_markup=pages)
+        return
 
     elif users[iden]["city"] and text == "Вывести случайную достопримечательность":
         #TODO ЗДЕСЬ ДЕЛАТЬ РАНДОМНЫЕ ПРИКОЛЫ
