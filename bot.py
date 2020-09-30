@@ -3,7 +3,7 @@ import sqlite3
 import os
 import random
 
-bot = telebot.TeleBot('I <3 U')
+bot = telebot.TeleBot('token')
 
 db = sqlite3.connect("zabase.db")
 cursor = db.cursor()
@@ -149,7 +149,7 @@ def send_text(message):
             for row in cursor.execute('''SELECT u.name FROM unit u JOIN city c ON city_id = c.id
             WHERE c.name=?''', [(text)]):
                 s += row[0] + '\r\n'
-            bot.send_message(message.chat.id, 'Выбран город {}\r\nСписок достопримечательностей'.format(text), reply_markup=markup1)
+            bot.send_message(message.chat.id, 'Выбран город {}'.format(text), reply_markup=markup1)
             db.commit()
         return
 
@@ -157,54 +157,35 @@ def send_text(message):
         rows = [x[0] for x in list(cursor.execute('''SELECT u.name FROM unit u JOIN city c ON city_id = c.id
             WHERE c.name=?''', [(users[iden]["city"])]))]
 
-        pages = telebot.types.InlineKeyboardMarkup()
-        
-        btns = []
-        btns.append(telebot.types.InlineKeyboardButton(text="*1*", callback_data="nope"))
+        if len(rows) == 0:
+            bot.send_message(message.chat.id, 'В нашей базе данных еще нет достопримечательностей в выбранном городе')
+        else:
+            pages = telebot.types.InlineKeyboardMarkup()
+            
+            btns = []
+            btns.append(telebot.types.InlineKeyboardButton(text="*1*", callback_data="nope"))
 
-        for i in range(1, len(rows)+1):
-            if i % 10 == 0 and i < 40:
-                btns.append(telebot.types.InlineKeyboardButton(text=str(i//10+1), callback_data=str(i//10+1)+'s'))
-            elif i > 40:
-                btns.append(telebot.types.InlineKeyboardButton(text=str(len(rows)//10+1),
-                    callback_data=str(len(rows)//10+1)+'s'))
-                break
+            for i in range(1, len(rows)+1):
+                if i % 10 == 0 and i < 40:
+                    btns.append(telebot.types.InlineKeyboardButton(text=str(i//10+1), callback_data=str(i//10+1)+'s'))
+                elif i > 40:
+                    btns.append(telebot.types.InlineKeyboardButton(text=str(len(rows)//10+1),
+                        callback_data=str(len(rows)//10+1)+'s'))
+                    break
 
-        pages.add(*btns)
+            pages.add(*btns)
 
-        page = 0
-        stop = len(rows) if page*10+10 > len(rows) else page*10+10
+            page = 0
+            stop = len(rows) if page*10+10 > len(rows) else page*10+10
 
-        s = ""
-        for i in range(page*10, stop):
-            s += rows[i] + '\r\n'
+            s = ""
+            for i in range(page*10, stop):
+                s += rows[i] + '\r\n'
 
-        bot.send_message(message.chat.id, 'Список достопримечательностей:\r\n\r\n{}'.format(s), reply_markup=pages)
+            bot.send_message(message.chat.id, 'Список достопримечательностей:\r\n\r\n{}'.format(s), reply_markup=pages)
         return
 
-    elif users[iden]["city"] and text == "Вывести случайную достопримечательность":
-        unit = {}
-        for row in cursor.execute('''SELECT id, name, description, location
-        FROM Unit WHERE Unit.city_id = (SELECT City.id FROM City JOIN userinfo on City.name = userinfo.city)'''):
-            unit[row[0]] = {"name": row[1], "description": row[2], "location": row[3]}#, "photo": row[4]}
-        if len(unit) == 0:
-            bot.send_message(message.chat.id, "В нашей базе данных еще нет достопримечательностей в выбранном городе")
-        else:
-            choosen = unit[random.randint(0, len(unit) - 1)]
-            text = str(choosen["name"]) + ":\r\n" + str(choosen["description"]) + "\r\n" + str(choosen["location"])
-            bot.send_message(message.chat.id, text)
-        pass
-
-    elif users[iden]["city"]:
-        row = cursor.execute('''SELECT name, description, location, photo
-        FROM Unit WHERE name =?''', [(text)])
-        # ДОБАВИТЬ ПРОВЕРКУ НА ТО ЧТО ДОСТОПРИМЕЧАТОЛЬНОСТЬ СУЩЕСТВУЕТ
-        # photo = row[3]
-        text = str(row[0]) + ":\r\n" + str(row[1]) + "\r\n" + str(row[2])
-        bot.send_message(message.chat.id, text)
-        pass
-
-    if users[iden]["city"] and text == "Вернуться к выбору города":
+    elif users[iden]["city"] and text == "Вернуться к выбору города":
         globals()["users"][iden]["city"] = None
         cursor.execute("UPDATE userinfo SET city=NULL WHERE user_id=?", [(iden)])
         s = ""
@@ -214,6 +195,57 @@ def send_text(message):
         bot.send_message(message.chat.id,
         'Выбрана страна {}\r\nВыберите город:\r\n{}'.format(users[iden]["country"], s[:-2]), reply_markup=markup0)
         db.commit()
+        return
+
+    elif users[iden]["city"] and text == "Вывести случайную достопримечательность":
+        count = cursor.execute('''SELECT COUNT(u.id) FROM unit u
+        JOIN city c ON u.city_id=c.id WHERE c.name=?''', [(users[iden]["city"])]).fetchone()[0]
+        
+        if count == 0:
+            bot.send_message(message.chat.id, "В нашей базе данных еще нет достопримечательностей в выбранном городе")
+        else:
+            unit = list(cursor.execute('''SELECT name, description, photo, location
+            FROM unit WHERE id=?''', [(random.randint(1, count))]).fetchone())
+
+            if not unit[3]:
+                loc = ''
+            else:
+                loc = '<a href=\"https://maps.google.com/?q={}\">Показать на карте</a>'.format(unit[3])
+
+            if not unit[2]:
+                bot.send_message(message.chat.id, '{}\r\n\r\n{}\r\n\r\n{}'.format(unit[0], unit[1], loc), parse_mode='HTML')
+            else:
+                try:
+                    bot.send_photo(message.chat.id, open(unit[2], 'rb'),
+                    '{}\r\n\r\n{}\r\n\r\n{}'.format(unit[0], unit[1], loc), parse_mode='HTML')
+                except FileNotFoundError:
+                    bot.send_photo(message.chat.id, unit[2],'{}\r\n\r\n{}\r\n\r\n{}'.format(unit[0], unit[1], loc), parse_mode='HTML')
+        return
+
+    elif users[iden]["city"]:
+        unit = cursor.execute('''SELECT u.name, description, photo, location
+        FROM unit u JOIN city c ON city_id=c.id
+        WHERE u.name=? AND c.name=?''', [(message.text), (users[iden]["city"])]).fetchone()
+
+        if not unit:
+            bot.send_message(message.chat.id, 
+            'Достопримечательности \'{}\' не существует или она не внесена в нашу базу('.format(message.text))
+        else:
+            unit = list(unit)
+
+            if not unit[3]:
+                loc = ''
+            else:
+                loc = '<a href=\"https://maps.google.com/?q={}\">Показать на карте</a>'.format(unit[3])
+
+            if not unit[2]:
+                bot.send_message(message.chat.id, '{}\r\n\r\n{}\r\n\r\n{}'.format(unit[0], unit[1], loc), parse_mode='HTML')
+            else:
+                try:
+                    bot.send_photo(message.chat.id, open(unit[2], 'rb'),
+                    '{}\r\n\r\n{}\r\n\r\n{}'.format(unit[0], unit[1], loc), parse_mode='HTML')
+                except FileNotFoundError:
+                    bot.send_photo(message.chat.id, unit[2],'{}\r\n\r\n{}\r\n\r\n{}'.format(unit[0], unit[1], loc), parse_mode='HTML')
         return
 
 
