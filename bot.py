@@ -1,8 +1,9 @@
 import telebot
 import sqlite3
 import os
+import random
 
-bot = telebot.TeleBot('TOKEN')
+bot = telebot.TeleBot('I <3 U')
 
 db = sqlite3.connect("zabase.db")
 cursor = db.cursor()
@@ -142,13 +143,13 @@ def send_text(message):
             bot.send_message(message.chat.id,
                 'Города \'{}\' не существует или он не внесен в нашу базу('.format(message.text))
         else:
+            s = ""
             globals()["users"][iden]["city"] = text
             cursor.execute("UPDATE userinfo SET city=? WHERE user_id=?", [(text), (iden)])
-            #for row in cursor.execute('''SELECT u.name FROM unit u JOIN city c ON city_id = c.id
-            #WHERE c.name=?''', [(text)]):
-            #    s += row[0] + '\r\n'
-            bot.send_message(message.chat.id,
-                'Выбран город {}\r\nСписок достопримечательностей'.format(text), reply_markup=markup1)
+            for row in cursor.execute('''SELECT u.name FROM unit u JOIN city c ON city_id = c.id
+            WHERE c.name=?''', [(text)]):
+                s += row[0] + '\r\n'
+            bot.send_message(message.chat.id, 'Выбран город {}\r\nСписок достопримечательностей'.format(text), reply_markup=markup1)
             db.commit()
         return
 
@@ -182,11 +183,25 @@ def send_text(message):
         return
 
     elif users[iden]["city"] and text == "Вывести случайную достопримечательность":
-        #TODO ЗДЕСЬ ДЕЛАТЬ РАНДОМНЫЕ ПРИКОЛЫ
+        unit = {}
+        for row in cursor.execute('''SELECT id, name, description, location
+        FROM Unit WHERE Unit.city_id = (SELECT City.id FROM City JOIN userinfo on City.name = userinfo.city)'''):
+            unit[row[0]] = {"name": row[1], "description": row[2], "location": row[3]}#, "photo": row[4]}
+        if len(unit) == 0:
+            bot.send_message(message.chat.id, "В нашей базе данных еще нет достопримечательностей в выбранном городе")
+        else:
+            choosen = unit[random.randint(0, len(unit) - 1)]
+            text = str(choosen["name"]) + ":\r\n" + str(choosen["description"]) + "\r\n" + str(choosen["location"])
+            bot.send_message(message.chat.id, text)
         pass
 
     elif users[iden]["city"]:
-        #TODO
+        row = cursor.execute('''SELECT name, description, location, photo
+        FROM Unit WHERE name =?''', [(text)])
+        # ДОБАВИТЬ ПРОВЕРКУ НА ТО ЧТО ДОСТОПРИМЕЧАТОЛЬНОСТЬ СУЩЕСТВУЕТ
+        # photo = row[3]
+        text = str(row[0]) + ":\r\n" + str(row[1]) + "\r\n" + str(row[2])
+        bot.send_message(message.chat.id, text)
         pass
 
     if users[iden]["city"] and text == "Вернуться к выбору города":
